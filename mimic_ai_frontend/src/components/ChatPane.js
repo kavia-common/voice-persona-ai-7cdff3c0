@@ -35,13 +35,28 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
     }
   }, [messages, isTyping]);
 
+  // New: Mimic state machine integration (declare BEFORE any usage)
+  const [mimicState, setMimicState] = useState(mimicMachineSingleton.getSnapshot());
+  useEffect(() => {
+    // start and subscribe
+    mimicMachineSingleton.start();
+    const unsub = mimicMachineSingleton.subscribe((snap) => {
+      setMimicState(snap);
+    });
+    return () => {
+      unsub();
+      // do not stop singleton to allow app-wide persistence; could stop if desired
+    };
+  }, []);
+
   // Add a subtle system message when Mimic enters MIMIC state
   const mimicPrevStateRef = useRef(mimicMachineSingleton.getSnapshot().state);
   useEffect(() => {
+    if (!mimicState) return;
     if (mimicState.state !== mimicPrevStateRef.current) {
       // state changed
       if (mimicState.state === "MIMIC") {
-        const txt = `Mimic is disguising as ${mimicState.disguise} and plays "${mimicState.sound}".`;
+        const txt = `Mimic is disguising as ${mimicState.disguise || "—"} and plays "${mimicState.sound || "—"}".`;
         setMessages((prev) => [
           ...prev,
           { role: "ai", text: txt, emotion: "🪞", ts: Date.now() },
@@ -49,7 +64,7 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
       }
       mimicPrevStateRef.current = mimicState.state;
     }
-  }, [mimicState.state, mimicState.disguise, mimicState.sound]); 
+  }, [mimicState?.state, mimicState?.disguise, mimicState?.sound]); 
 
   // Current emotion state (default: happy/calm)
   const [currentEmotion, setCurrentEmotion] = useState({
@@ -461,19 +476,7 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
   const aiBadge = useMemo(() => initials(aiDisplayName, "AI"), [aiDisplayName]);
   const userBadge = useMemo(() => initials(userDisplayName, "You"), [userDisplayName]);
 
-  // New: Mimic state machine integration
-  const [mimicState, setMimicState] = useState(mimicMachineSingleton.getSnapshot());
-  useEffect(() => {
-    // start and subscribe
-    mimicMachineSingleton.start();
-    const unsub = mimicMachineSingleton.subscribe((snap) => {
-      setMimicState(snap);
-    });
-    return () => {
-      unsub();
-      // do not stop singleton to allow app-wide persistence; could stop if desired
-    };
-  }, []);
+
 
   return (
     <div className="chat-pane">
