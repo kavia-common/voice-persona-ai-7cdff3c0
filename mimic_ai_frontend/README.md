@@ -1,82 +1,73 @@
-# Lightweight React Template for KAVIA
+# Mimic.AI-M1 Frontend (React)
 
-This project provides a minimal React template with a clean, modern UI and minimal dependencies.
+A modern, minimalistic web UI for Mimic.AI-M1. It provides:
+- Real-time voice input/output (browser speech recognition + TTS fallback)
+- Persona-simulated, adaptive chat experience (stubs for backend LLM)
+- Emotion analytics and behavioral insights dashboard
+- User profile management modal
+- Voice setup and cloning modal with enrollment flow (stubbed)
 
-## Features
+Color palette:
+- Primary: `#2F80ED`
+- Secondary: `#6C63FF`
+- Accent: `#21E6C1`
+Theme: light (with dark mode toggle for UI preview)
 
-- **Lightweight**: No heavy UI frameworks - uses only vanilla CSS and React
-- **Modern UI**: Clean, responsive design with KAVIA brand styling
-- **Fast**: Minimal dependencies for quick loading times
-- **Simple**: Easy to understand and modify
+## Quick Start
 
-## Getting Started
+- Install: `npm install`
+- Run dev server: `npm start` (http://localhost:3000)
+- Tests: `npm test`
+- Production build: `npm run build`
 
-In the project directory, you can run:
+## Environment Variables
 
-### `npm start`
+Copy `.env.example` to `.env` and set values:
+- `REACT_APP_API_BASE_URL`: Base URL of backend REST APIs
+- `REACT_APP_SITE_URL`: Public site URL for email link redirects (if needed)
 
-Runs the app in development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Note: Do not commit secrets. The orchestrator configures the actual `.env`.
 
-### `npm test`
+## Project Structure
 
-Launches the test runner in interactive watch mode.
+- `src/App.js`: Main dashboard layout (sidebar, chat pane, analytics, behavior cards, modals)
+- `src/components/ChatPane.*`: Conversation UI, voice input, playback, persona+emotion reply stub
+- `src/components/EmotionAnalytics.*`: Graph-style bars for emotion scores
+- `src/components/BehaviorSummary.*`: Summary cards for behavior KPIs
+- `src/components/VoiceSetupModal.*`: Voice recording and stubbed enrollment
+- `src/components/UserProfile.*`: Modal to view/edit user profile
+- `src/services/api.js`: Integration-ready API client stubs reading env vars
 
-### `npm run build`
+## Integration Points (REST APIs)
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+The app is wired with stubs to simplify backend integration:
+- User profile:
+  - `getCurrentUser()`
+  - `updateUserProfile(patch)`
+- Chat:
+  - `sendChatMessage(history, userText, context)`
+- Voice:
+  - `enrollVoiceSample(formData)`
+  - `synthesizeTTS(enrollmentId, text)`
+- Insights:
+  - `getBehaviorInsights()`
 
-## Customization
+Update these in `src/services/api.js` to call your backend:
+- Base URL: `REACT_APP_API_BASE_URL`
+- Endpoints are grouped: `/user`, `/chat`, `/voice`, `/insights`
 
-### Colors
+## Layout
 
-The main brand colors are defined as CSS variables in `src/App.css`:
+- Sidebar navigation: profile, voice setup, docs link, theme toggle
+- Main content:
+  - Left: real-time conversation pane
+  - Right: emotion analysis + behavior summary cards
+- Modals: voice setup cloning, user profile edit
 
-```css
-:root {
-  --kavia-orange: #E87A41;
-  --kavia-dark: #1A1A1A;
-  --text-color: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.7);
-  --border-color: rgba(255, 255, 255, 0.1);
-}
-```
+## Notes
 
-### Components
+- Voice input uses Web Speech API (browser support varies).
+- TTS uses system speech synthesis for fallback; replace with backend TTS in `api.js` when available.
+- Components are written with no heavy UI framework, using CSS only.
 
-This template uses pure HTML/CSS components instead of a UI framework. You can find component styles in `src/App.css`. 
-
-Common components include:
-- Buttons (`.btn`, `.btn-large`)
-- Container (`.container`)
-- Navigation (`.navbar`)
-- Typography (`.title`, `.subtitle`, `.description`)
-
-## Learn More
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Learn React: https://react.dev/
