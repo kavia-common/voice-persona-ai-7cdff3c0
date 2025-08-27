@@ -1,5 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./ChatPane.css";
+import { formatTimestamp, relativeTime, initials } from "./chatUtils";
 
 /**
  * PUBLIC_INTERFACE
@@ -15,15 +16,23 @@ import "./ChatPane.css";
  */
 export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNewEmotionResult }) {
   const [messages, setMessages] = useState([
-    { role: "ai", text: "Hi there! I’m your Mimic.AI persona. How can I assist you today?", emotion: "🙂" }
+    { role: "ai", text: "Hey! I’m your Mimic.AI persona. What’s on your mind today?", emotion: "🙂", ts: Date.now() }
   ]);
   const [input, setInput] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
 
   // Local user voice profile state (from prop, e.g. from VoiceSetup flow)
   const [userVoiceProfile, setUserVoiceProfile] = useState(propUserVoiceProfile || null);
   const recognitionRef = useRef(null);
+
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isTyping]);
 
   // Current emotion state (default: happy/calm)
   const [currentEmotion, setCurrentEmotion] = useState({
@@ -37,6 +46,17 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
     emoji: "🙂",
     feedback: "😊 Positive mood detected! Conversation is adaptive.",
   });
+
+  // Memory of last few user topics for temporal context
+  const topicsMemoryRef = useRef([]);
+  const rememberTopic = (text) => {
+    const words = (text || "").toLowerCase().match(/\b[a-z]{4,}\b/g) || [];
+    // pick a few descriptive words as "topics"
+    const picks = Array.from(new Set(words)).slice(0, 3);
+    if (picks.length) {
+      topicsMemoryRef.current = [...picks, ...topicsMemoryRef.current].slice(0, 10);
+    }
+  };
 
   // PUBLIC_INTERFACE
   // Helper: Fake emotion analysis stub (returns mock result as if by "analyzing" input text/audio)
@@ -144,92 +164,67 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
 
   /**
    * PUBLIC_INTERFACE
-   * Generates an AI reply that mimics the user's personality and ADAPTS tone in real-time
-   * to the latest detected emotion. The output is a novel statement, not a paraphrase,
-   * with tone and word choice influenced by both persona and emotion.
-   * 
-   * === EXTENSION POINT for rich backend-driven persona + emotion-aware responses ===
-   * 
-   * To extend: Replace this function with a backend call providing:
-   *   - Dialog history,
-   *   - User’s persona/profile (from voice enrollment/profile storage),
-   *   - Most recent detected emotion (from emotionResult),
-   * and return a fully backend-generated, context- and emotion-aware response.
-   *
-   * @param {string} userText - The user's input message
-   * @param {Object} emotionResult - The emotion result associated with the user input
-   * @param {Object} personaProfile - Typically from userVoiceProfile, may contain persona/style info
-   * @returns {string} - An AI response adapted for both persona and emotion
+   * Generates an AI reply that mimics the user's personality and ADAPTS tone with temporal context.
+   * Returns a natural, human-like response string.
    */
   function generatePersonalityAndEmotionReply(userText, emotionResult, personaProfile) {
-    // === Persona + Emotion Adaptation Stub ===
-    // In a full implementation, all three data points (persona, emotion, input) would be sent to an LLM.
-    // This stub demonstrates in-prototype synthesis for BOTH persona and emotion.
-
-    // Simulated persona styles (could be dynamic from personaProfile)
     const personaStyles = [
       {
         name: 'Friendly & Supportive',
         opening: [
           "Absolutely! Here's a thought:",
-          "I hear you loud and clear –",
+          "I hear you—",
           "Let's explore this together:",
           "That made me think:",
         ],
         followup: [
-          "Do you want to talk more about it?",
-          "What would you do differently next time?",
-          "That's just my perspective – what's yours?",
-          "How does that make you feel?",
-          "I'm always here to listen!",
+          "Want to unpack that a bit?",
+          "Happy to keep going if you are.",
+          "What part stands out most to you?",
+          "I'm listening.",
         ],
         baseTone: "friendly"
       },
       {
         name: 'Analytical & Calm',
         opening: [
-          "Interesting point. Statistically speaking,",
-          "If we break it down,",
-          "Taking a step back,",
-          "It appears that ",
+          "Interesting point. If we break it down,",
+          "Zooming out for a sec,",
+          "From a pragmatic angle,",
+          "It appears that",
         ],
         followup: [
-          "Would you agree with that assessment?",
-          "That's worth further investigation.",
-          "Let's consider possible alternatives.",
-          "What do you think are the next steps?",
-          "Is there a specific aspect you want to focus on?",
+          "Does that align with your intuition?",
+          "We can test that assumption next.",
+          "What variable matters most here?",
+          "We could try a small experiment.",
         ],
         baseTone: "analytical"
       },
       {
         name: 'Playful & Witty',
         opening: [
-          "You know, that totally sparks my circuits!",
-          "Haha, love that energy!",
-          "Let me toss an idea your way:",
+          "Love that spark!",
+          "Haha, that tickles my circuits—",
           "Off the top of my virtual head:",
+          "Here's a spicy take:",
         ],
         followup: [
-          "Care to challenge my robotic wisdom?",
-          "I double-click on that notion!",
-          "Ping me with your wildest thoughts.",
-          "That's my story and I'm sticking to it. How about you?",
+          "Care to riff on that with me?",
+          "I’m game if you are.",
+          "Throw me a curveball.",
+          "Your move!",
         ],
         baseTone: "playful"
       },
     ];
 
-    // Pick persona (using enrolled userVoiceProfile's name, or fallback hash)
     const personaIndex =
       (personaProfile && personaProfile.name)
         ? (personaProfile.name.charCodeAt(0) % personaStyles.length)
-        : (userText && userText.length
-          ? userText.charCodeAt(0) % personaStyles.length
-          : 0);
+        : (userText && userText.length ? userText.charCodeAt(0) % personaStyles.length : 0);
     const persona = personaStyles[personaIndex];
 
-    // Emotion logic: tone/word modifiers based on dominant detected emotion
     let emotionCue = "";
     let emotionOpeningMod = "";
     let emotionFollowupMod = "";
@@ -238,111 +233,111 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
 
     switch (dominant) {
       case "Excited":
-        emotionCue = "There's such energetic vibes!";
-        emotionOpeningMod = "brimming with enthusiasm, ";
-        emotionFollowupMod = "Let's seize this moment.";
+        emotionCue = "that energy is contagious.";
+        emotionOpeningMod = "with an upbeat tone, ";
+        emotionFollowupMod = "Let's ride that momentum.";
         break;
       case "Frustrated":
-        emotionCue = "I sense some frustration. It's totally okay.";
-        emotionOpeningMod = "gentle and understanding, ";
-        emotionFollowupMod = "We'll work through any challenge.";
+        emotionCue = "I can tell there's tension there.";
+        emotionOpeningMod = "gently and without judgment, ";
+        emotionFollowupMod = "We can take it one small step at a time.";
         break;
       case "Calm":
-        emotionCue = "The conversation feels calm and thoughtful.";
-        emotionOpeningMod = "with a peaceful tone, ";
-        emotionFollowupMod = "Let's consider this calmly.";
+        emotionCue = "the pace feels steady.";
+        emotionOpeningMod = "staying grounded, ";
+        emotionFollowupMod = "No rush—we'll keep it clear.";
         break;
       case "Happy":
-        emotionCue = "The positive energy is contagious!";
-        emotionOpeningMod = "with an upbeat note, ";
-        emotionFollowupMod = "Glad for this great mood!";
+        emotionCue = "the good vibes help.";
+        emotionOpeningMod = "on a positive note, ";
+        emotionFollowupMod = "I'm glad we're in a good groove.";
         break;
       default:
         break;
     }
 
-    // Use parts of user message only for theme hints
     const words = userText.match(/\b\w{4,}\b/g) || [];
     const keyword = words.length > 0 ? words[Math.floor(Math.random() * words.length)] : "";
-    const themeHint = keyword ? `Something about "${keyword.toLowerCase()}" is intriguing.` : "";
 
-    // Compose message using persona+emotion stubs
+    // Simple temporal context: reference recent topics if relevant
+    const recentTopic = topicsMemoryRef.current.find(t => t !== keyword);
+    const contextHint = recentTopic ? `By the way, earlier you mentioned "${recentTopic}". ` : "";
+
     const opening = persona.opening[Math.floor(Math.random() * persona.opening.length)];
     const followup = persona.followup[Math.floor(Math.random() * persona.followup.length)];
 
-    // Terse input/empty
     if (!userText.trim() || userText.trim().length < 3) {
       return `${opening} ${
         emotionOpeningMod ? "(" + emotionOpeningMod + ")" : ""
-      } I'm here whenever you're ready to chat. ${emoji} ${emotionFollowupMod ? emotionFollowupMod : followup}`;
+      } I'm here when you're ready. ${emoji} ${emotionFollowupMod || followup}`;
     }
-    // Question
     if (userText.trim().endsWith("?")) {
-      return `${opening} ${
-        emotionOpeningMod ? "(" + emotionOpeningMod + ")" : ""
-      } That's a thoughtful question. ${themeHint} ${
-        emotionCue
-      } Here's my take: staying curious matters! ${emoji} ${emotionFollowupMod ? emotionFollowupMod : followup}`;
+      return `${opening} ${emotionOpeningMod ? "(" + emotionOpeningMod + ")" : ""} ${contextHint}${
+        keyword ? `On "${keyword}", ` : ""
+      }${emotionCue} Here's my take: curiosity is a great compass. ${emoji} ${emotionFollowupMod || followup}`;
     }
     if (dominant === "Excited") {
-      return `${opening} (excited tone) ${emotionCue} Let's ride that energy forward. ${emoji} ${emotionFollowupMod ? emotionFollowupMod : followup}`;
+      return `${opening} (excited tone) ${contextHint}Love the spark—${emotionCue} ${emoji} ${emotionFollowupMod || followup}`;
     }
     if (dominant === "Frustrated") {
-      return `${opening} (soothing tone) ${emotionCue} It might be tough, but we grow from these moments. ${emoji} ${emotionFollowupMod ? emotionFollowupMod : followup}`;
+      return `${opening} (soothing tone) ${contextHint}I hear you—${emotionCue} ${emoji} ${emotionFollowupMod || followup}`;
     }
     if (dominant === "Calm") {
-      return `${opening} (calm style) ${emotionCue} Maybe it's time for a new idea? ${emoji} ${emotionFollowupMod ? emotionFollowupMod : followup}`;
+      return `${opening} (calm style) ${contextHint}I appreciate the thoughtfulness—${emotionCue} ${emoji} ${emotionFollowupMod || followup}`;
     }
     if (dominant === "Happy") {
-      return `${opening} (happy vibe) ${emotionCue} ${themeHint} ${emoji} ${emotionFollowupMod ? emotionFollowupMod : followup}`;
+      return `${opening} (warm vibe) ${contextHint}I like where this is going—${emotionCue} ${emoji} ${emotionFollowupMod || followup}`;
     }
-
-    // Default
-    return `${opening} ${themeHint} ${emotionCue} Let me know your thoughts. ${emoji} ${followup}`;
+    return `${opening} ${contextHint}${emotionCue} ${emoji} ${followup}`;
   }
 
   // PUBLIC_INTERFACE
-  // Now: AI mimics, paraphrases, and varies the reply, matching observed style and real-time emotion.
+  // Now: AI mimics, paraphrases, and varies the reply, matching observed style and real-time emotion with typing simulation.
   const handleSend = async () => {
     if (input.trim() === "") return;
     const userText = input;
-    // 1. Analyze emotion based on userText
+
+    // 1) Remember topics for temporal context
+    rememberTopic(userText);
+
+    // 2) Emotion analysis
     const emotionResult = analyzeEmotion(userText);
     setCurrentEmotion(emotionResult);
-
-    // 2. Propagate emotion result to parent for emotion analytics update
     if (onNewEmotionResult) onNewEmotionResult(emotionResult);
 
-    // 3. Append user message (with emotion)
+    // 3) Append user message (with emotion & timestamp)
     const userMsg = {
       role: "user",
       text: userText,
       emotion: emotionResult.emoji,
+      ts: Date.now(),
     };
     setMessages((prev) => [...prev, userMsg]);
 
-    // 4. Generate AI response using persona+emotion (stubbed for backend), then playback via enrolled voice
-    setTimeout(async () => {
-      const aiText = generatePersonalityAndEmotionReply(userText, emotionResult, userVoiceProfile);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          text: aiText,
-          emotion: emotionResult.emoji,
-          mimicked: true,
-        },
-      ]);
-      // Playback AI reply using setup/enrolled voice
-      await synthesizeVoiceWithUserProfile({
-        role: "ai",
-        text: aiText,
-        emotion: emotionResult.emoji,
-      });
-    }, 700);
-
+    // 4) Simulate typing indicator with delay proportional to response length
+    setIsTyping(true);
     setInput("");
+
+    // Compute a human-like delay
+    const aiDraft = generatePersonalityAndEmotionReply(userText, emotionResult, userVoiceProfile);
+    const baseDelay = 400; // ms
+    const perChar = 12; // ms per char for a natural reading/typing feel
+    const maxDelay = 2800;
+    const delay = Math.min(maxDelay, baseDelay + aiDraft.length * perChar);
+
+    setTimeout(async () => {
+      setIsTyping(false);
+      const aiMsg = {
+        role: "ai",
+        text: aiDraft,
+        emotion: emotionResult.emoji,
+        mimicked: true,
+        ts: Date.now(),
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      await synthesizeVoiceWithUserProfile(aiMsg);
+    }, delay);
   };
 
   // PUBLIC_INTERFACE
@@ -366,8 +361,6 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
       const transcript = event.results[0][0].transcript;
       setInput(transcript);
       setIsListening(false);
-      // Optionally: auto-send after voice input
-      // handleSend();
     };
     recognitionRef.current.onend = () => setIsListening(false);
     recognitionRef.current.onerror = () => setIsListening(false);
@@ -383,10 +376,6 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
   /**
    * PUBLIC_INTERFACE
    * Playback chat history using ONLY the enrolled/setup (userVoiceProfile) voice.
-   * All AI/user messages are read out in the user's own cloned/enrolled voice.
-   * Fallback to default TTS if setup voice is unavailable.
-   * 
-   * Extension: Backend TTS integration, see synthesizeVoiceWithUserProfile.
    */
   const playBackHistory = async () => {
     setIsPlaying(true);
@@ -421,27 +410,17 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
   /**
    * PUBLIC_INTERFACE
    * Synthesize message using user's cloned/enrolled voice if present for ALL playback.
-   * 
-   * If userVoiceProfile.audioURL exists:
-   *   - Always play that for both user and AI message (Demo).
-   *   - To integrate backend: fetch/generate TTS via backend using userVoiceProfile.voiceEnrollmentId & msg.text
-   * 
-   * If none exists, fallback to default system TTS.
-   * 
-   * @param {Object} msg - The chat message { role, text, ... }
+   * Fallback to system TTS.
    */
   const synthesizeVoiceWithUserProfile = (msg) => {
     if (userVoiceProfile && userVoiceProfile.audioURL) {
-      // DEMO: Always replay stored sample for every message. (Replace for true TTS in prod)
       return new Promise((resolve) => {
         const audio = new Audio(userVoiceProfile.audioURL);
         audio.onended = resolve;
         audio.onerror = resolve;
         audio.play();
       });
-      // BACKEND EXTENSION: fetch `/api/tts?voiceId=...&text=...`
     } else {
-      // System TTS fallback
       return new Promise((resolve) => {
         const utter = new window.SpeechSynthesisUtterance(msg.text);
         window.speechSynthesis.speak(utter);
@@ -453,11 +432,17 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
 
   /**
    * PUBLIC_INTERFACE
-   * Allows chat to receive the enrolled voice profile for demo/testing (triggered by VoiceSetupModal).
+   * Allows chat to receive the enrolled voice profile (triggered by VoiceSetupModal).
    */
   const handleVoiceProfileEnrolled = (profileObj) => {
     setUserVoiceProfile(profileObj);
   };
+
+  // Memoized display name and avatar label
+  const aiDisplayName = "Mimic.AI";
+  const userDisplayName = userVoiceProfile?.name || "You";
+  const aiBadge = useMemo(() => initials(aiDisplayName, "AI"), [aiDisplayName]);
+  const userBadge = useMemo(() => initials(userDisplayName, "You"), [userDisplayName]);
 
   return (
     <div className="chat-pane">
@@ -487,30 +472,53 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
                   new CustomEvent("openVoiceSetup", { detail: { onEnroll: handleVoiceProfileEnrolled } })
                 );
               }}
-              style={{marginLeft: 10}}
+              style={{ marginLeft: 10 }}
             >
               🎤 Setup Voice
             </button>
           )}
         </div>
       </div>
-      <div className="chat-messages">
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`chat-msg chat-msg-${msg.role}`}
-            aria-live="polite"
-          >
-            <span className="chat-avatar">
-              {msg.role === "ai" ? "🤖" : "🧑"}
-            </span>
-            <span className="chat-msg-text">{msg.text}</span>
-            {msg.emotion && (
-              <span className="chat-msg-emotion">{msg.emotion}</span>
-            )}
+
+      <div className="chat-messages" ref={scrollRef}>
+        {messages.map((msg, idx) => {
+          const isAI = msg.role === "ai";
+          return (
+            <div className="chat-row" key={idx} aria-live="polite">
+              {/* Avatar */}
+              <div className="chat-avatar-badge" title={isAI ? aiDisplayName : userDisplayName}>
+                {isAI ? aiBadge : userBadge}
+              </div>
+              {/* Bubble */}
+              <div className={`chat-msg chat-msg-${msg.role}`}>
+                <span className="chat-msg-text">{msg.text}</span>
+                {msg.emotion && <span className="chat-msg-emotion">{msg.emotion}</span>}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Typing indicator */}
+        {isTyping && (
+          <div className="chat-row" aria-live="polite">
+            <div className="chat-avatar-badge" title={aiDisplayName}>{aiBadge}</div>
+            <div className="chat-typing">
+              <span>Typing</span>
+              <span className="typing-dots">
+                <span></span><span></span><span></span>
+              </span>
+            </div>
           </div>
-        ))}
+        )}
+
+        {/* Subtle meta line for the last timestamp */}
+        {messages.length > 0 && (
+          <div className="chat-meta" aria-hidden="true">
+            {formatTimestamp(messages[messages.length - 1].ts)} • {relativeTime(messages[messages.length - 1].ts)}
+          </div>
+        )}
       </div>
+
       <div className="chat-input-row">
         <input
           className="chat-input"
