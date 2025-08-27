@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./ChatPane.css";
 import { formatTimestamp, relativeTime, initials } from "./chatUtils";
+import { mimicMachineSingleton } from "../services/mimicLogic";
 
 /**
  * PUBLIC_INTERFACE
@@ -33,6 +34,22 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  // Add a subtle system message when Mimic enters MIMIC state
+  const mimicPrevStateRef = useRef(mimicMachineSingleton.getSnapshot().state);
+  useEffect(() => {
+    if (mimicState.state !== mimicPrevStateRef.current) {
+      // state changed
+      if (mimicState.state === "MIMIC") {
+        const txt = `Mimic is disguising as ${mimicState.disguise} and plays "${mimicState.sound}".`;
+        setMessages((prev) => [
+          ...prev,
+          { role: "ai", text: txt, emotion: "🪞", ts: Date.now() },
+        ]);
+      }
+      mimicPrevStateRef.current = mimicState.state;
+    }
+  }, [mimicState.state, mimicState.disguise, mimicState.sound]); 
 
   // Current emotion state (default: happy/calm)
   const [currentEmotion, setCurrentEmotion] = useState({
@@ -444,11 +461,55 @@ export default function ChatPane({ userVoiceProfile: propUserVoiceProfile, onNew
   const aiBadge = useMemo(() => initials(aiDisplayName, "AI"), [aiDisplayName]);
   const userBadge = useMemo(() => initials(userDisplayName, "You"), [userDisplayName]);
 
+  // New: Mimic state machine integration
+  const [mimicState, setMimicState] = useState(mimicMachineSingleton.getSnapshot());
+  useEffect(() => {
+    // start and subscribe
+    mimicMachineSingleton.start();
+    const unsub = mimicMachineSingleton.subscribe((snap) => {
+      setMimicState(snap);
+    });
+    return () => {
+      unsub();
+      // do not stop singleton to allow app-wide persistence; could stop if desired
+    };
+  }, []);
+
   return (
     <div className="chat-pane">
       <div className="chat-header">
         <h2>Conversation</h2>
-        <div className="chat-actions">
+        {/* Mimic persona live state */}
+        <div className="chat-actions" style={{ alignItems: "center" }}>
+          <div
+            title="Mimic Persona State"
+            style={{
+              marginRight: 8,
+              padding: "6px 10px",
+              borderRadius: 10,
+              fontSize: "0.9em",
+              background:
+                mimicState.state === "MIMIC" ? "#e6fff7" : "#eef3ff",
+              color:
+                mimicState.state === "MIMIC" ? "#0d7d64" : "#2256b8",
+              border:
+                mimicState.state === "MIMIC"
+                  ? "1px solid #21E6C144"
+                  : "1px solid #2F80ED33",
+              display: "flex",
+              gap: 8,
+            }}
+          >
+            <span>{mimicState.state === "MIMIC" ? "🪞 MIMIC" : "💤 IDLE"}</span>
+            {mimicState.state === "MIMIC" && (
+              <>
+                <span>•</span>
+                <span>Disguise: {mimicState.disguise || "—"}</span>
+                <span>•</span>
+                <span>Sound: {mimicState.sound || "—"}</span>
+              </>
+            )}
+          </div>
           <button
             className="chat-act-btn"
             onClick={isListening ? stopListening : startListening}
